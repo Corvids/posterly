@@ -26,3 +26,4 @@ npm run dev
 ## TODOs
 
 - [ ] Figure out a way to persist uploaded images and settings across page refreshes
+- [ ] Improve the panning on zoom in fullscreen mode

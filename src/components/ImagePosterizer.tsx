@@ -14,6 +14,10 @@ export default function ImagePosterizer() {
   const [slideshowImages, setSlideshowImages] = useState<string[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [processedSettings, setProcessedSettings] = useState<{levels: number, blackAndWhite: boolean, flipVertical: boolean} | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,12 +174,106 @@ export default function ImagePosterizer() {
     setIsFullscreen(false);
     setFlipVertical(false);
     setProcessedSettings(null);
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
     resetImage();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
     localStorage.removeItem('posterizeToolData');
   };
+
+  const handleZoom = (direction: number) => {
+    setZoomLevel(prev => {
+      const newLevel = Math.max(0.5, Math.min(5, prev + direction * 0.1));
+      return Math.round(newLevel * 10) / 10;
+    });
+  };
+
+  const resetZoom = () => {
+    setZoomLevel(1);
+    setPanPosition({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent | MouseEvent) => {
+    if (isDragging && zoomLevel > 1) {
+      const deltaX = (e.clientX - dragStart.x) * 0.5;
+      const deltaY = (e.clientY - dragStart.y) * 0.5;
+      
+      setPanPosition(prev => {
+        const maxPanX = (zoomLevel - 1) * 200;
+        const maxPanY = (zoomLevel - 1) * 200;
+        
+        return {
+          x: Math.max(-maxPanX, Math.min(maxPanX, prev.x + deltaX)),
+          y: Math.max(-maxPanY, Math.min(maxPanY, prev.y + deltaY))
+        };
+      });
+      
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const handleMouseUp = (e?: React.MouseEvent | MouseEvent) => {
+    setIsDragging(false);
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      handleZoom(e.deltaY > 0 ? -1 : 1);
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (isFullscreen) {
+      switch (e.key) {
+        case '+':
+        case '=':
+          e.preventDefault();
+          handleZoom(1);
+          break;
+        case '-':
+          e.preventDefault();
+          handleZoom(-1);
+          break;
+        case '0':
+          e.preventDefault();
+          resetZoom();
+          break;
+        case 'Escape':
+          setIsFullscreen(false);
+          break;
+      }
+    }
+  };
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -231,7 +329,7 @@ export default function ImagePosterizer() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Posterization Levels: {posterizationLevels}
+                      Posterization Level: {posterizationLevels}
                     </label>
                     <input
                       type="range"
@@ -438,9 +536,47 @@ export default function ImagePosterizer() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
+
+                  <button
+                    onClick={resetZoom}
+                    className="absolute top-4 left-4 p-2 text-white hover:text-gray-300 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors z-10"
+                    title="Reset zoom"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+
+                  <div className="absolute top-4 left-20 flex space-x-2">
+                    <button
+                      onClick={() => handleZoom(-1)}
+                      className="p-2 text-white hover:text-gray-300 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors z-10"
+                      title="Zoom out"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleZoom(1)}
+                      className="p-2 text-white hover:text-gray-300 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors z-10"
+                      title="Zoom in"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
                   
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <div className="relative overflow-hidden rounded-lg w-full h-full">
+                  <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+                    <div 
+                      className="relative overflow-hidden rounded-lg w-full h-full"
+                      onWheel={handleWheel}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                    >
                       <div 
                         className="flex transition-transform duration-500 ease-in-out h-full"
                         style={{ transform: `translateX(-${currentSlide * 100}%)` }}
@@ -450,7 +586,12 @@ export default function ImagePosterizer() {
                             <img
                               src={image}
                               alt={slideshowImages.length === 1 ? 'Original' : (index === 0 ? 'Posterized' : 'Original')}
-                              className="w-full h-full object-contain"
+                              className="w-full h-full object-contain transition-transform duration-200"
+                              style={{
+                                transform: `scale(${zoomLevel}) translate(${panPosition.x}px, ${panPosition.y}px)`,
+                                cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                              }}
+                              onMouseDown={handleMouseDown}
                             />
                             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-center text-white text-lg font-medium bg-black bg-opacity-50 px-4 py-2 rounded">
                               {slideshowImages.length === 1 
@@ -482,6 +623,10 @@ export default function ImagePosterizer() {
                         </button>
                       </>
                     )}
+                  </div>
+
+                  <div className="absolute bottom-4 right-4 bg-black bg-opacity-50 text-white px-3 py-2 rounded text-sm">
+                    Zoom: {Math.round(zoomLevel * 100)}%
                   </div>
                 </div>
               </div>
